@@ -69,9 +69,10 @@ class Paddle:
         self.width = 200
         self.enlarge_timer = 2
 
-    def increase_speed(self):
-        self.speed += 2
-        pygame.time.set_timer(SPEED_POWERUP_EVENT, 3000)
+        def increase_speed(self):
+            if not ball.speed_power_up:  # Increase speed only if speed power-up is not active
+                self.speed += 2
+                pygame.time.set_timer(SPEED_POWERUP_EVENT, 3000)
 
 class Ball:
     def __init__(self):
@@ -80,6 +81,10 @@ class Ball:
         self.y = height // 2
         self.speed_x = .2
         self.speed_y = -.2
+        self.power_up_explosion = False
+        self.explosion_timer = 0
+        self.speed_power_up = False
+        self.speed_power_up_timer = 0
         self.power_up_explosion = False
         self.explosion_timer = 0
 
@@ -98,6 +103,13 @@ class Ball:
             self.reset_ball()
             global lives
             lives -= 1
+        
+        # Update power-up timers
+        if self.speed_power_up:
+            self.speed_power_up_timer -= 1
+            if self.speed_power_up_timer <= 0:
+                self.speed_power_up = False
+                paddle.speed -= 2
 
         if self.power_up_explosion:
             self.explosion_timer -= 1
@@ -115,20 +127,21 @@ class Ball:
         # Collision detection with bricks
         ball_rect = pygame.Rect(self.x - self.radius, self.y - self.radius, self.radius * 2, self.radius * 2)
         bricks_to_remove = []
-        power_up_effects = []
         for brick in bricks:
             if brick.colliderect(ball_rect):
-                bricks_to_remove.append(brick)
-                brick_collision.play()
                 if isinstance(brick, PowerUpBrick):
-                    power_up_effects.append(brick.power_up_effect)
+                    brick.apply_power_up(self, paddle)  # Apply power-up directly
+                    bricks_to_remove.append(brick)
+                else:
+                    if abs(ball_rect.bottom - brick.y) < 2 or abs(ball_rect.top - brick.y - brick.height) < 2:
+                        self.speed_y = -self.speed_y
+                    if abs(ball_rect.right - brick.x) < 2 or abs(ball_rect.left - brick.x - brick.width) < 2:
+                        self.speed_x = -self.speed_x
+                    bricks_to_remove.append(brick)
+                brick_collision.play()
 
         for brick in bricks_to_remove:
-            if not isinstance(brick, PowerUpBrick):
-                bricks.remove(brick)
-
-        for effect in power_up_effects:
-            effect(paddle, self)
+            bricks.remove(brick)
 
         if not bricks:
             # All bricks cleared, game over
@@ -159,41 +172,68 @@ class PowerUpBrick(Brick):
     def __init__(self, x, y, color):
         super().__init__(x, y, color)
         self.power_up_effect = None
+        self.power_up_icon = PowerUp(x, y, color)
 
+    def apply_power_up(self, ball, paddle):
+        if self.power_up_effect:
+            self.power_up_effect(ball, paddle)
+            self.power_up_effect = None
+
+    def draw(self):
+        super().draw()
+        if self.power_up_effect:
+            self.power_up_icon.x = self.x + self.width // 2 - self.power_up_icon.width // 2
+            self.power_up_icon.y = self.y + self.height // 2 - self.power_up_icon.height // 2
+            self.power_up_icon.draw()
+
+class PowerUp:
+    def __init__(self, x, y, color):
+        self.width = 20
+        self.height = 20
+        self.x = x
+        self.y = y
+        self.color = color
+
+    def draw(self):
+        pygame.draw.rect(screen, self.color, (self.x, self.y, self.width, self.height))
+
+# Class for the enlarge power-up brick
 class EnlargePowerUpBrick(PowerUpBrick):
     def __init__(self, x, y):
         super().__init__(x, y, YELLOW)
         self.power_up_effect = self.handle_power_up
 
-    def handle_power_up(self, paddle, ball):
+    def handle_power_up(self, ball, paddle):
         paddle.enlarge_paddle()
 
+# Class for the speed power-up brick
 class SpeedPowerUpBrick(PowerUpBrick):
     def __init__(self, x, y):
         super().__init__(x, y, GREEN)
         self.power_up_effect = self.handle_power_up
 
-    def handle_power_up(self, paddle, ball):
+    def handle_power_up(self, ball, paddle):
+        ball.speed_power_up = True
+        ball.speed_power_up_timer = 300
         paddle.increase_speed()
 
+
+# Class for the explosion power-up brick
 class ExplosionPowerUpBrick(PowerUpBrick):
     def __init__(self, x, y):
         super().__init__(x, y, BLUE)
         self.power_up_effect = self.handle_power_up
 
-    def handle_power_up(self, paddle, ball):
-        ball.handle_collision(bricks)
-
-# Create game objects
-paddle = Paddle()
-ball = Ball()
-bricks = []
+    def handle_power_up(self, ball, paddle):
+        ball.power_up_explosion = True
+        ball.explosion_timer = 300
 
 # Generate regular bricks
 brick_width = 50
 brick_height = 20
 brick_spacing = 10
 
+bricks = []
 for row in range(5):
     for col in range(16):
         brick_x = col * (brick_width + brick_spacing) + brick_spacing
@@ -212,6 +252,10 @@ for row in range(5):
         brick_type = random.choice(power_up_brick_types)
         brick_color = random.choice(power_up_brick_colors)
         bricks.append(brick_type(brick_x, brick_y))
+
+# Create the paddle and ball objects
+paddle = Paddle()
+ball = Ball()
 
 # Game loop
 running = True
@@ -300,6 +344,13 @@ while running:
         # Update the display
         pygame.display.flip()
         continue
+
+    # Draw power-ups in the lower right corner
+    for brick in bricks:
+        if isinstance(brick, PowerUpBrick) and brick.power_up_effect:
+            brick.power_up_icon.x = width - brick.power_up_icon.width - 5
+            brick.power_up_icon.y = height - brick.power_up_icon.height - 5
+            brick.power_up_icon.draw()
 
     # Update the display
     pygame.display.flip()
