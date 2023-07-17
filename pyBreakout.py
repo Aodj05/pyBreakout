@@ -23,6 +23,23 @@ WHITE = (255, 255, 255)
 YELLOW = (255, 255, 0)
 GREEN = (0, 255, 0)
 
+def load_high_scores():
+    high_scores = []
+    with open("high_scores.txt", "r") as file:
+        for line in file:
+            name, score = line.strip().split(",")
+            high_scores.append((name, int(score)))
+    return high_scores
+
+high_scores = load_high_scores()
+
+def update_high_scores(name, score):
+    high_scores.append((name, score))
+    high_scores.sort(key=lambda x: x[1], reverse=True)  # Sort scores in descending order
+    with open("high_scores.txt", "w") as file:
+        for name, score in high_scores:
+            file.write(f"{name},{score}\n")
+
 class Paddle:
     def __init__(self):
         self.width = 100
@@ -69,10 +86,10 @@ class Paddle:
         self.width = 200
         self.enlarge_timer = 2
 
-        def increase_speed(self):
-            if not ball.speed_power_up:  # Increase speed only if speed power-up is not active
-                self.speed += 2
-                pygame.time.set_timer(SPEED_POWERUP_EVENT, 3000)
+    def increase_speed(self):
+        if not ball.speed_power_up:  # Increase speed only if speed power-up is not active
+            self.speed += 2
+            pygame.time.set_timer(SPEED_POWERUP_EVENT, 3000)
 
 class Ball:
     def __init__(self):
@@ -265,6 +282,20 @@ game_over = False
 # Define custom events
 SPEED_POWERUP_EVENT = pygame.USEREVENT + 1
 
+def display_high_scores():
+    font = pygame.font.Font(None, 30)
+    y_offset = 100
+    for i, (name, score) in enumerate(high_scores):
+        text = font.render(f"{i + 1}. {name}: {score}", True, WHITE)
+        screen.blit(text, (width // 2 - text.get_width() // 2, y_offset))
+        y_offset += 30
+
+font = pygame.font.Font(None, 42)
+
+# Name input variables
+name_input_active = False
+name = ""
+
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -332,14 +363,31 @@ while running:
             game_over = True
 
         if game_over:
-            # Game over
-            font = pygame.font.Font(None, 42)
-            game_over_text = font.render("Game Over", True, RED)
-            screen.blit(game_over_text, (width // 2 - game_over_text.get_width() // 2, height // 2))
+            if not name_input_active and (len(high_scores) < 10 or lives > high_scores[-1][1]):
+                name_input_active = True
+                name = ""
+                name_prompt_text = font.render("Enter your name:", True, RED)
+                screen.blit(name_prompt_text, (width // 2 - name_prompt_text.get_width() // 2, height // 2))
+                pygame.display.flip()
+                continue
 
-            # Restart or Quit prompt
-            prompt_text = font.render("Press R to Restart or Q to Quit", True, RED)
-            screen.blit(prompt_text, (width // 2 - prompt_text.get_width() // 2, height // 2 + 50))
+        # ... (previous code)
+
+        if name_input_active:
+            name_text = font.render(name, True, WHITE)
+            screen.blit(name_text, (width // 2 - name_text.get_width() // 2, height // 2 + 50))
+            pygame.display.flip()
+
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        update_high_scores(name, lives)
+                        name_input_active = False
+                    elif event.key == pygame.K_BACKSPACE:
+                        name = name[:-1]
+                    else:
+                        name += event.unicode
+
     else:
         # Update the display
         pygame.display.flip()
